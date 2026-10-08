@@ -1,0 +1,1363 @@
+---
+title: "CassavaFlowering"
+author: "Michael Landi"
+date: "2026-02-02"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+
+```{r setup, include=F}
+
+library(data.table)
+library(DESeq2)
+library(ggplot2)
+library(pheatmap)
+library(EnhancedVolcano)
+library(VennDiagram)
+library(grid)
+
+#load - design - ~ condition * geno * time
+dds <- readRDS("counts/DESeqCasFlower.rds")
+
+#save paramters
+alpha <- 0.05
+lfc   <- 1
+timepoints <- c("T0","T1","T2")
+```
+
+
+```{r}
+## available coefficients
+resultsNames(dds)
+```
+
+
+# DSC272_early - Light vs NoLight - timepoints (T0,T1,T2)
+
+```{r}
+res.DSC272.T0 <- results(dds, name = "condition_Light_vs_NoLight")
+
+res.DSC272.T1 <- results(dds, contrast = list(c(
+  "condition_Light_vs_NoLight",
+  "conditionLight.timeT1"
+)))
+
+res.DSC272.T2 <- results(dds, contrast = list(c(
+  "condition_Light_vs_NoLight",
+  "conditionLight.timeT2"
+)))
+```
+
+Histogram of p values 
+```{r}
+par(mfrow=c(1,3))
+hist(res.DSC272.T0$pvalue, breaks=50, main="DSC272 T0", xlab="p-value")
+hist(res.DSC272.T1$pvalue, breaks=50, main="DSC272 T1", xlab="p-value")
+hist(res.DSC272.T2$pvalue, breaks=50, main="DSC272 T2", xlab="p-value")
+par(mfrow=c(1,1))
+
+```
+
+MA plots 
+
+```{r}
+
+plotMA(res.DSC272.T0)
+
+```
+
+
+
+```{r}
+
+#combine time points results 
+
+res.DSC272.all <- data.table(
+  gene = rownames(res.DSC272.T0),
+
+  log2FC_T0 = res.DSC272.T0$log2FoldChange,
+  padj_T0   = res.DSC272.T0$padj,
+
+  log2FC_T1 = res.DSC272.T1$log2FoldChange,
+  padj_T1   = res.DSC272.T1$padj,
+
+  log2FC_T2 = res.DSC272.T2$log2FoldChange,
+  padj_T2   = res.DSC272.T2$padj
+)
+
+head(res.DSC272.all)
+
+```
+
+```{r}
+#counts 
+# 
+count.T0 <- sum(res.DSC272.all$padj_T0 < alpha & abs(res.DSC272.all$log2FC_T0) >= lfc, na.rm = TRUE)
+count.T1 <- sum(res.DSC272.all$padj_T1 < alpha & abs(res.DSC272.all$log2FC_T1) >= lfc, na.rm = TRUE)
+count.T2 <- sum(res.DSC272.all$padj_T2 < alpha & abs(res.DSC272.all$log2FC_T2) >= lfc, na.rm = TRUE)
+
+# 
+deg.counts.DSC272 <- data.table(
+  Time = c("T0", "T1", "T2"),
+  N_DEGs = c(count.T0, count.T1, count.T2)
+)
+
+deg.counts.DSC272
+```
+
+```{r}
+sig.genes.DSC272 <- res.DSC272.all[(padj_T0 < alpha & abs(log2FC_T0) >= lfc) |
+                                     (padj_T1 < alpha & abs(log2FC_T1) >= lfc) |
+                                     (padj_T2 < alpha & abs(log2FC_T2) >= lfc)]
+
+gene.list.DSC272 <- sig.genes.DSC272$gene
+
+
+```
+
+
+
+
+Heatmap of significant genes 
+```{r}
+#subset for heatmap plotting 
+dds.DSC272 <- dds[, colData(dds)$geno == "DSC272_early"]
+
+#exp matrix for heatmap
+vsd.DSC272 <- vst(dds.DSC272, blind = T)
+mat.DSC272 <- assay(vsd.DSC272)
+
+##keep significant genes
+keep.DSC272 <- intersect(gene.list.DSC272, rownames(mat.DSC272))
+mat.DSC272  <- mat.DSC272[keep.DSC272, , drop=FALSE]
+
+#try scaled - 
+#mat.scaled.DSC272 <- t(scale(t(mat.DSC272))) - no difference on the heatmap
+
+#annotation columnes 
+anno.col.DSC272 <- data.frame(
+  Time      = colData(dds.DSC272)$time,
+  Condition = colData(dds.DSC272)$condition
+)
+rownames(anno.col.DSC272) <- colnames(dds.DSC272)
+
+#order
+sample.order.DSC272 <- order(colData(dds.DSC272)$time,
+                             colData(dds.DSC272)$condition)
+
+
+
+mat.DSC272 <- mat.DSC272[, sample.order.DSC272, drop=FALSE]
+
+anno.col.DSC272 <- anno.col.DSC272[sample.order.DSC272, , drop=FALSE]
+
+## heatmap (all significant genes)
+pheatmap(mat.DSC272,
+         scale = "row",
+         annotation_col = anno.col.DSC272,
+         cluster_cols = FALSE,
+         show_rownames = FALSE,
+         fontsize_col = 10,
+         main = "DSC272_early: sig genes")
+
+```
+
+
+Clustering genes based on expression pattern
+
+```{r}
+#mat.DSC272
+
+#scale 
+mat.scaled.DSC272 <- t(scale(t(mat.DSC272)))
+
+#check if there are NAs
+any(is.na(mat.scaled.DSC272))
+any(is.na(mat.DSC272))
+
+##coldata
+coldata.DSC272 <- as.data.table(colData(dds.DSC272), keep.rownames = "sample")
+
+sample.order.DSC272 <- order(coldata.DSC272$time, coldata.DSC272$condition)
+
+coldata.DSC272 <- coldata.DSC272[sample.order.DSC272]
+
+#k-means clustering 
+set.seed(123)
+km.DSC272 <- kmeans(mat.scaled.DSC272, centers = 6)
+
+#stable clustering
+centers.DSC272 <- km.DSC272$centers
+#order by mean expression 
+cluster.order.DSC272 <- order(rowMeans(centers.DSC272))
+#map
+new.cluster.labels.DSC272 <- match(km.DSC272$cluster, cluster.order.DSC272)
+
+#cluster dataframe
+cluster.df.DSC272 <- data.table(
+  gene = rownames(mat.scaled.DSC272),
+  cluster = factor(new.cluster.labels.DSC272, levels = 1:6)
+)
+
+#order matrix by cluster
+ord.DSC272 <- order(cluster.df.DSC272$cluster)
+mat.scaled.DSC272 <- mat.scaled.DSC272[ord.DSC272, ]
+cluster.df.DSC272 <- cluster.df.DSC272[ord.DSC272]
+
+#row annotata
+anno.row.DSC272 <- data.frame(Cluster = cluster.df.DSC272$cluster)
+rownames(anno.row.DSC272) <- cluster.df.DSC272$gene
+
+
+#heatmap
+pheatmap(mat.scaled.DSC272,
+         cluster_rows = F,
+         cluster_cols = F,
+         annotation_col = anno.col.DSC272,
+         annotation_row =anno.row.DSC272,
+         show_rownames = F,
+         main = "DSC272",
+         cutree_rows = 6)
+
+```
+
+
+```{r}
+mat.scaled.dt.DSC272 <- as.data.table(mat.scaled.DSC272, keep.rownames = "gene")
+
+mat.scaled.dt.DSC272 <- merge(mat.scaled.dt.DSC272, cluster.df.DSC272, by = "gene")
+
+mat.scaled.dt.DSC272.long <- melt(mat.scaled.dt.DSC272,
+                                  id.vars = c("gene", "cluster"),
+                                  variable.name = "sample",
+                                  value.name = "expr")
+
+## add metadata
+mat.scaled.dt.DSC272.long  <- merge(mat.scaled.dt.DSC272.long , coldata.DSC272, by = "sample")
+
+#summary
+mat.scaled.dt.DSC272.summary <- mat.scaled.dt.DSC272.long[, .(
+  mean_expr = mean(expr)
+), by = .(cluster, time, condition)]
+
+
+#cluster orde
+mat.scaled.dt.DSC272.summary[, cluster := factor(cluster, levels = 1:6)]
+
+#plot
+ggplot(mat.scaled.dt.DSC272.summary,
+       aes(x = time,
+           y = mean_expr,
+           color = condition,
+           group = condition)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  facet_wrap(~ cluster, scales = "free_y") +
+  theme_classic() +
+  labs(title = "Effect of light on DSC120_late clusters",
+       x = "Time",
+       y = "Exp") +
+  scale_color_manual(values = c(
+    "NoLight" = "#56B4E9",
+    "Light"   = "#E69F00"
+  ))
+
+```
+
+
+Volcano plots
+```{r}
+a<-EnhancedVolcano(res.DSC272.T0,
+                lab = NA,
+                x = "log2FoldChange",
+                y = "padj",
+                pCutoff = alpha,
+                FCcutoff = lfc,
+                title = "T0",
+                subtitle = NULL) + theme_classic() + theme(legend.position ="none")
+
+```
+
+
+
+```{r}
+b<-EnhancedVolcano(res.DSC272.T1,
+                lab = NA,
+                x = "log2FoldChange",
+                y = "padj",
+                pCutoff = alpha,
+                FCcutoff = lfc,
+                title = "T1",
+                subtitle = NULL) + theme_classic()+ theme(legend.position ="none")
+
+```
+
+
+
+
+```{r}
+c<-EnhancedVolcano(res.DSC272.T2,
+                lab = NA,
+                x = "log2FoldChange",
+                y = "padj",
+                pCutoff = alpha,
+                FCcutoff = lfc,
+                subtitle = NULL,
+                title = "T2") + theme_classic()+ theme(legend.position ="none")
+```
+
+
+
+
+# DSC120_late  - Light vs NoLight - timepoints (T0,T1,T2)
+
+```{r}
+res.DSC120.T0 <- results(dds,
+                         contrast = list(c(
+                           "condition_Light_vs_NoLight",
+                           "conditionLight.genoDSC120_late"
+                         )))
+
+res.DSC120.T1 <- results(dds,
+                         contrast = list(c(
+                           "condition_Light_vs_NoLight",
+                           "conditionLight.genoDSC120_late",
+                           "conditionLight.timeT1",
+                           "conditionLight.genoDSC120_late.timeT1"
+                         )))
+
+res.DSC120.T2 <- results(dds,
+                         contrast = list(c(
+                           "condition_Light_vs_NoLight",
+                           "conditionLight.genoDSC120_late",
+                           "conditionLight.timeT2",
+                           "conditionLight.genoDSC120_late.timeT2"
+                         )))
+```
+
+
+```{r}
+## check out histgram
+par(mfrow=c(1,3))
+hist(res.DSC120.T0$pvalue, breaks=50, main="DSC120 T0", xlab="p-value")
+hist(res.DSC120.T1$pvalue, breaks=50, main="DSC120 T1", xlab="p-value")
+hist(res.DSC120.T2$pvalue, breaks=50, main="DSC120 T2", xlab="p-value")
+par(mfrow=c(1,1))
+```
+
+```{r}
+plotMA(res.DSC120.T0)
+plotMA(res.DSC120.T1)
+plotMA(res.DSC120.T2)
+
+```
+
+
+
+```{r}
+##combine
+res.DSC120.all <- data.table(
+  gene = rownames(res.DSC120.T0),
+  
+  log2FC_T0   = res.DSC120.T0$log2FoldChange,
+  padj_T0     = res.DSC120.T0$padj,
+  
+  log2FC_T1   = res.DSC120.T1$log2FoldChange,
+  padj_T1     = res.DSC120.T1$padj,
+  
+  log2FC_T2   = res.DSC120.T2$log2FoldChange,
+  padj_T2     = res.DSC120.T2$padj
+)
+
+```
+
+
+#counts
+```{r}
+count.T0 <- sum(res.DSC120.all$padj_T0 < alpha & abs(res.DSC120.all$log2FC_T0) >= lfc, na.rm = TRUE)
+count.T1 <- sum(res.DSC120.all$padj_T1 < alpha & abs(res.DSC120.all$log2FC_T1) >= lfc, na.rm = TRUE)
+count.T2 <- sum(res.DSC120.all$padj_T2 < alpha & abs(res.DSC120.all$log2FC_T2) >= lfc, na.rm = TRUE)
+
+# 
+deg.counts.DSC120 <- data.table(
+  Time = c("T0", "T1", "T2"),
+  N_DEGs = c(count.T0, count.T1, count.T2)
+)
+
+deg.counts.DSC120
+```
+
+
+```{r}
+sig.genes.DSC120 <- res.DSC120.all[
+  (padj_T0 < alpha & abs(log2FC_T0) >= lfc) |
+    (padj_T1 < alpha & abs(log2FC_T1) >= lfc) |
+    (padj_T2 < alpha & abs(log2FC_T2) >= lfc)
+]
+gene.list.DSC120 <- sig.genes.DSC120$gene
+```
+
+
+
+```{r}
+#subset dds for heatmap
+dds.DSC120 <- dds[, colData(dds)$geno == "DSC120_late"]
+
+vsd.DSC120 <- vst(dds.DSC120, blind = T)
+mat.DSC120 <- assay(vsd.DSC120)
+
+keep.DSC120 <- intersect(gene.list.DSC120, rownames(mat.DSC120))
+mat.DSC120  <- mat.DSC120[keep.DSC120, , drop=FALSE]
+
+anno.col.DSC120 <- data.frame(
+  Time      = colData(dds.DSC120)$time,
+  Condition = colData(dds.DSC120)$condition
+)
+rownames(anno.col.DSC120) <- colnames(dds.DSC120)
+
+sample.order.DSC120 <- order(colData(dds.DSC120)$time,
+                             colData(dds.DSC120)$condition)
+
+mat.DSC120 <- mat.DSC120[, sample.order.DSC120, drop=FALSE]
+anno.col.DSC120 <- anno.col.DSC120[sample.order.DSC120, , drop=FALSE]
+
+pheatmap(mat.DSC120,
+         scale = "row",
+         annotation_col = anno.col.DSC120,
+         cluster_cols = FALSE,
+         show_rownames = FALSE,
+         fontsize_col = 10,
+         main = "DSC120_late: significant genes")
+
+```
+
+
+```{r}
+mat.DSC120
+
+#scale 
+mat.scaled.DSC120 <- t(scale(t(mat.DSC120)))
+
+mat.DSC120
+
+#scale 
+mat.scaled.DSC120 <- t(scale(t(mat.DSC120)))
+
+#check if there are NAs
+any(is.na(mat.scaled.DSC120))
+any(is.na(mat.DSC120))
+
+##coldata
+coldata.DSC120 <- as.data.table(colData(dds.DSC120), keep.rownames = "sample")
+
+sample.order.DSC120 <- order(coldata.DSC120$time, coldata.DSC120$condition)
+
+coldata.DSC120 <- coldata.DSC120[sample.order.DSC120]
+
+#k-means clustering 
+set.seed(123)
+km.DSC120 <- kmeans(mat.scaled.DSC120, centers = 6)
+
+#stable clustering
+centers.DSC120 <- km.DSC120$centers
+#order by mean expression 
+cluster.order.DSC120 <- order(rowMeans(centers.DSC120))
+#map
+new.cluster.labels.DSC120 <- match(km.DSC120$cluster, cluster.order.DSC120)
+
+#cluster dataframe
+cluster.df.DSC120 <- data.table(
+  gene = rownames(mat.scaled.DSC120),
+  cluster = factor(new.cluster.labels.DSC120, levels = 1:6)
+)
+
+#order matrix by cluster
+ord.DSC120 <- order(cluster.df.DSC120$cluster)
+mat.scaled.DSC120 <- mat.scaled.DSC120[ord.DSC120, ]
+cluster.df.DSC120 <- cluster.df.DSC120[ord.DSC120]
+
+#row annotata
+anno.row.DSC120 <- data.frame(Cluster = cluster.df.DSC120$cluster)
+rownames(anno.row.DSC120) <- cluster.df.DSC120$gene
+
+
+#heatmap
+pheatmap(mat.scaled.DSC120,
+         cluster_rows = F,
+         cluster_cols = F,
+         annotation_col = anno.col.DSC120,
+         annotation_row =anno.row.DSC120,
+         show_rownames = F,
+         main = "DSC120",
+         cutree_rows = 6)
+
+```
+
+
+```{r}
+mat.scaled.dt.DSC120 <- as.data.table(mat.scaled.DSC120, keep.rownames = "gene")
+
+mat.scaled.dt.DSC120 <- merge(mat.scaled.dt.DSC120, cluster.df.DSC120, by = "gene")
+
+mat.scaled.dt.DSC120.long <- melt(mat.scaled.dt.DSC120,
+                                  id.vars = c("gene", "cluster"),
+                                  variable.name = "sample",
+                                  value.name = "expr")
+
+## add metadata
+mat.scaled.dt.DSC120.long  <- merge(mat.scaled.dt.DSC120.long , coldata.DSC120, by = "sample")
+
+#summary
+mat.scaled.dt.DSC120.summary <- mat.scaled.dt.DSC120.long[, .(
+  mean_expr = mean(expr)
+), by = .(cluster, time, condition)]
+
+
+#cluster orde
+mat.scaled.dt.DSC120.summary[, cluster := factor(cluster, levels = 1:6)]
+
+#plot
+ggplot(mat.scaled.dt.DSC120.summary,
+       aes(x = time,
+           y = mean_expr,
+           color = condition,
+           group = condition)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  facet_wrap(~ cluster, scales = "free_y") +
+  theme_classic() +
+  labs(title = "Effect of light on DSC120_late clusters",
+       x = "Time",
+       y = "Exp") +
+  scale_color_manual(values = c(
+    "NoLight" = "#56B4E9",
+    "Light"   = "#E69F00"
+  ))
+
+
+
+```
+
+
+
+
+
+```{r}
+a <- EnhancedVolcano(res.DSC120.T0,
+                lab=NA,
+                x="log2FoldChange",
+                y="padj",
+                pCutoff=alpha,
+                FCcutoff=lfc,
+                subtitle = NULL,
+                title="T0")+ theme_classic() + theme(legend.position = "none")
+```
+
+
+
+```{r}
+b<-EnhancedVolcano(res.DSC120.T1,
+                lab=NA,
+                x="log2FoldChange",
+                y="padj",
+                pCutoff=alpha,
+                FCcutoff=lfc,
+                subtitle = NULL,
+                title="T1")+ theme_classic() + theme(legend.position = "none")
+
+```
+
+
+
+```{r}
+
+c<- EnhancedVolcano(res.DSC120.T2,
+                lab=NA,
+                x="log2FoldChange",
+                y="padj",
+                pCutoff=alpha,
+                FCcutoff=lfc,
+                subtitle = NULL,
+                title="T2")+ theme_classic() + theme(legend.position = "none")
+```
+
+# DSC196_non  - Light vs NoLight - timepoints (T0,T1,T2)
+
+```{r}
+res.DSC196.T0 <- results(dds,
+                         contrast = list(c(
+                           "condition_Light_vs_NoLight",
+                           "conditionLight.genoDSC196_non")))
+
+res.DSC196.T1 <- results(dds,
+                         contrast = list(c(
+                           "condition_Light_vs_NoLight",
+                           "conditionLight.genoDSC196_non",
+                           "conditionLight.timeT1",
+                           "conditionLight.genoDSC196_non.timeT1")))
+
+res.DSC196.T2 <- results(dds,
+                         contrast = list(c(
+                           "condition_Light_vs_NoLight",
+                           "conditionLight.genoDSC196_non",
+                           "conditionLight.timeT2",
+                           "conditionLight.genoDSC196_non.timeT2")))
+```
+
+
+```{r}
+#combine
+res.DSC196.all <- data.table(
+  gene = rownames(res.DSC196.T0),
+  
+  log2FC_T0   = res.DSC196.T0$log2FoldChange,
+  padj_T0     = res.DSC196.T0$padj,
+  
+  log2FC_T1   = res.DSC196.T1$log2FoldChange,
+  padj_T1     = res.DSC196.T1$padj,
+  
+  log2FC_T2   = res.DSC196.T2$log2FoldChange,
+  padj_T2     = res.DSC196.T2$padj
+)
+
+```
+
+
+```{r}
+count.T0 <- sum(res.DSC196.all$padj_T0 < alpha & abs(res.DSC196.all$log2FC_T0) >= lfc, na.rm = TRUE)
+count.T1 <- sum(res.DSC196.all$padj_T1 < alpha & abs(res.DSC196.all$log2FC_T1) >= lfc, na.rm = TRUE)
+count.T2 <- sum(res.DSC196.all$padj_T2 < alpha & abs(res.DSC196.all$log2FC_T2) >= lfc, na.rm = TRUE)
+
+# 
+deg.counts.DSC196 <- data.table(
+  Time = c("T0", "T1", "T2"),
+  N_DEGs = c(count.T0, count.T1, count.T2)
+)
+
+deg.counts.DSC196
+```
+
+```{r}
+#significant DEGS
+sig.genes.DSC196 <- res.DSC196.all[
+  (padj_T0 < alpha & abs(log2FC_T0) >= lfc) |
+    (padj_T1 < alpha & abs(log2FC_T1) >= lfc) |
+    (padj_T2 < alpha & abs(log2FC_T2) >= lfc)
+]
+gene.list.DSC196 <- sig.genes.DSC196$gene
+```
+
+
+
+```{r}
+
+#subset for heatmap
+dds.DSC196 <- dds[, colData(dds)$geno == "DSC196_non"]
+
+vsd.DSC196 <- vst(dds.DSC196, blind = T)
+mat.DSC196 <- assay(vsd.DSC196)
+
+keep.DSC196 <- intersect(gene.list.DSC196, rownames(mat.DSC196))
+mat.DSC196  <- mat.DSC196[keep.DSC196, , drop=FALSE]
+
+anno.col.DSC196 <- data.frame(
+  Time      = colData(dds.DSC196)$time,
+  Condition = colData(dds.DSC196)$condition
+)
+rownames(anno.col.DSC196) <- colnames(dds.DSC196)
+
+sample.order.DSC196 <- order(colData(dds.DSC196)$time,
+                             colData(dds.DSC196)$condition)
+
+mat.DSC196 <- mat.DSC196[, sample.order.DSC196, drop=FALSE]
+anno.col.DSC196 <- anno.col.DSC196[sample.order.DSC196, , drop=FALSE]
+
+pheatmap(mat.DSC196,
+         scale = "row",
+         annotation_col = anno.col.DSC196,
+         cluster_cols = FALSE,
+         show_rownames = FALSE,
+         fontsize_col = 10,
+         main = "DSC196_non: significant genes")
+
+```
+
+
+```{r}
+#mat.DSC196
+
+#scale 
+mat.scaled.DSC196 <- t(scale(t(mat.DSC196)))
+
+#scale 
+mat.scaled.DSC196 <- t(scale(t(mat.DSC196)))
+
+#check if there are NAs
+any(is.na(mat.scaled.DSC196))
+any(is.na(mat.DSC196))
+
+##coldata
+coldata.DSC196 <- as.data.table(colData(dds.DSC196), keep.rownames = "sample")
+
+sample.order.DSC196 <- order(coldata.DSC196$time, coldata.DSC196$condition)
+
+coldata.DSC196 <- coldata.DSC196[sample.order.DSC196]
+
+#k-means clustering 
+set.seed(123)
+km.DSC196 <- kmeans(mat.scaled.DSC196, centers = 6)
+
+#stable clustering
+centers.DSC196 <- km.DSC196$centers
+#order by mean expression 
+cluster.order.DSC196 <- order(rowMeans(centers.DSC196))
+#map
+new.cluster.labels.DSC196 <- match(km.DSC196$cluster, cluster.order.DSC196)
+
+#cluster dataframe
+cluster.df.DSC196 <- data.table(
+  gene = rownames(mat.scaled.DSC196),
+  cluster = factor(new.cluster.labels.DSC196, levels = 1:6)
+)
+
+#order matrix by cluster
+ord.DSC196 <- order(cluster.df.DSC196$cluster)
+mat.scaled.DSC196 <- mat.scaled.DSC196[ord.DSC196, ]
+cluster.df.DSC196 <- cluster.df.DSC196[ord.DSC196]
+
+#row annotata
+anno.row.DSC196 <- data.frame(Cluster = cluster.df.DSC196$cluster)
+rownames(anno.row.DSC196) <- cluster.df.DSC196$gene
+
+
+#heatmap
+pheatmap(mat.scaled.DSC196,
+         cluster_rows = F,
+         cluster_cols = F,
+         annotation_col = anno.col.DSC196,
+         annotation_row =anno.row.DSC196,
+         show_rownames = F,
+         main = "DSC196",
+         cutree_rows = 6)
+
+```
+
+```{r}
+mat.scaled.dt.DSC196 <- as.data.table(mat.scaled.DSC196, keep.rownames = "gene")
+
+mat.scaled.dt.DSC196 <- merge(mat.scaled.dt.DSC196, cluster.df.DSC196, by = "gene")
+
+mat.scaled.dt.DSC196.long <- melt(mat.scaled.dt.DSC196,
+                                  id.vars = c("gene", "cluster"),
+                                  variable.name = "sample",
+                                  value.name = "expr")
+
+## add metadata
+mat.scaled.dt.DSC196.long  <- merge(mat.scaled.dt.DSC196.long , coldata.DSC196, by = "sample")
+
+#summary
+mat.scaled.dt.DSC196.summary <- mat.scaled.dt.DSC196.long[, .(
+  mean_expr = mean(expr)
+), by = .(cluster, time, condition)]
+
+
+#cluster orde
+mat.scaled.dt.DSC196.summary[, cluster := factor(cluster, levels = 1:6)]
+
+#plot
+ggplot(mat.scaled.dt.DSC196.summary,
+       aes(x = time,
+           y = mean_expr,
+           color = condition,
+           group = condition)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  facet_wrap(~ cluster, scales = "free_y") +
+  theme_classic() +
+  labs(title = "Effect of light on DSC196_late clusters",
+       x = "Time",
+       y = "Exp") +
+  scale_color_manual(values = c(
+    "NoLight" = "#56B4E9",
+    "Light"   = "#E69F00"
+  ))
+
+
+```
+
+
+
+
+```{r}
+a <- EnhancedVolcano(res.DSC196.T0,
+                lab=NA,
+                x="log2FoldChange",
+                y="padj",
+                pCutoff=alpha,
+                FCcutoff=lfc,
+                subtitle = NULL,
+                title="T0") + theme_classic()+ theme(legend.position ="none")
+
+```
+
+
+
+```{r}
+
+b<-EnhancedVolcano(res.DSC196.T1,
+                lab=NA,
+                x="log2FoldChange",
+                y="padj",
+                pCutoff=alpha,
+                FCcutoff=lfc,
+                subtitle = NULL,
+                title="T1")+ theme_classic()+ theme(legend.position ="none")
+```
+
+
+
+
+```{r}
+c<-EnhancedVolcano(res.DSC196.T2,
+                lab=NA,
+                x="log2FoldChange",
+                y="padj",
+                pCutoff=alpha,
+                FCcutoff=lfc,
+                subtitle = NULL,
+                title="T2")+ theme_classic()+ theme(legend.position ="none")
+
+
+```
+
+
+Now lets check out gene ontology 
+
+```{r}
+
+#extract gene clusters 
+#early 
+# list of genes per cluster
+genes.by.cluster.DSC272 <- mat.scaled.dt.DSC272[, .(genes = list(gene)), by = cluster]
+
+# list of genes in each cluster 
+gene.list.DSC272  <- setNames(genes.by.cluster.DSC272$genes,
+                            genes.by.cluster.DSC272$cluster)
+
+#late 
+genes.by.cluster.DSC120 <- mat.scaled.dt.DSC120[, .(genes = list(gene)), by = cluster]
+
+gene.list.DSC120  <- setNames(genes.by.cluster.DSC120$genes,
+                            genes.by.cluster.DSC120$cluster)
+
+#late 
+# list of genes per cluster
+genes.by.cluster.DSC196 <- mat.scaled.dt.DSC196[, .(genes = list(gene)), by = cluster]
+
+# list of genes in each cluster 
+gene.list.DSC196 <- setNames(genes.by.cluster.DSC196$genes,
+                            genes.by.cluster.DSC196$cluster)
+
+#for each cluster
+#gene.list.DSC272
+#gene.list.DSC196
+#gene.list.DSC120
+
+
+```
+
+
+
+```{r}
+
+sig.genes.DSC272.exp <- copy(sig.genes.DSC272)
+#add a column checking _T0, _T1, _T2 colums = positive log2FC as Up and negative as Down
+sig.genes.DSC272.exp[, `:=`(
+  expLevelT0 = fcase(
+    padj_T0 < alpha & log2FC_T0 >= lfc, "Up",
+    padj_T0 < alpha & log2FC_T0 <= -lfc, "Down",
+    default = "NS"
+  ),
+  expLevelT1 = fcase(
+    padj_T1 < alpha & log2FC_T1 >= lfc, "Up",
+    padj_T1 < alpha & log2FC_T1 <= -lfc, "Down",
+    default = "NS"
+  ),
+  expLevelT2 = fcase(
+    padj_T2 < alpha & log2FC_T2 >= lfc, "Up",
+    padj_T2 < alpha & log2FC_T2 <= -lfc, "Down",
+    default = "NS"
+  )
+)]
+
+
+#Now add funx
+anno <- fread("Mesculenta_671_v8.1.P14.annotation_info.txt")
+anno <- anno[, .(anno$locusName,anno$`Best-hit-arabi-defline`, anno$`Best-hit-arabi-name`)]
+colnames(anno) <- c("gene","anno", "arabID")
+#get unique annotations
+anno <- unique(anno[, .(gene, anno,arabID)])
+
+#modify the genes in the sig file to match anno
+sig.genes.DSC272.exp$gene <- gsub("\\.v[0-9].*", "", sig.genes.DSC272.exp$gene)
+
+#match the expression file with anno
+sig.genes.DSC272.exp <- anno[
+  sig.genes.DSC272.exp,
+  on = .(gene)
+]
+
+##Now check if there are any arabidopsis matching 
+flowering.genes <- fread("CopyFlowerArab.tsv")
+florid.genes <- fread("floridGenes/FLORID_306_flowering_genes.csv")
+flowering.genes <- flowering.genes[,. (flowering.genes$`Gene number`,
+                                       flowering.genes$`Gene name`,
+                                       flowering.genes$`Flowering pathway`,
+                                       flowering.genes$`Protein function`)]
+colnames(flowering.genes) <- c("arabID","anno","pathway","funx")
+colnames(florid.genes) <- c("sym" ,"arabID","funx","path")
+florid.genes <- florid.genes[,.(sym, arabID, funx)]
+
+#combine 
+flower.florid.genes <- merge(flowering.genes, florid.genes, 
+                            by = "arabID", 
+                            all = T, 
+                            suffixes = c(".flowerPlanck", ".florid"))
+
+#now we have a total of 328 genes 
+
+#check matches of flowering genes
+sig.genes.DSC272.flower <- flower.florid.genes[
+  sig.genes.DSC272.exp,
+  on = .(arabID)]
+
+
+### now I want to check where the genes are coming from 
+#gene.list.DSC272
+
+#convert list to table 
+cluster.DSC272.dt <- rbindlist(
+  lapply(names(gene.list.DSC272), function(cl) {
+    data.table(
+      gene = gene.list.DSC272[[cl]],
+      cluster = as.integer(cl)
+    )
+  })
+)
+
+#modify gene names 
+cluster.DSC272.dt$gene <- gsub("\\.v[0-9].*", "", cluster.DSC272.dt$gene)
+
+#merge
+cluster.DSC272.dt.anno <- merge(
+  cluster.DSC272.dt,
+  sig.genes.DSC272.flower,
+  by = "gene",
+  all.x = TRUE
+)
+
+#write.table(sig.genes.DSC272.exp,"sigDEGs/sig.genes.DSC272.txt",sep="\t", row.names = F, quote = F)
+
+#write.table(cluster.DSC272.dt.anno,"sigDEGs/sig.genes.DSC272.withFlowerGenesNclusters.txt",sep="\t", row.names = F, quote = F)
+
+#### late
+sig.genes.DSC120.exp <- copy(sig.genes.DSC120)
+#add a column checking _T0, _T1, _T2 colums = positive log2FC as Up and negative as Down
+sig.genes.DSC120.exp[, `:=`(
+  expLevelT0 = fcase(
+    padj_T0 < alpha & log2FC_T0 >= lfc, "Up",
+    padj_T0 < alpha & log2FC_T0 <= -lfc, "Down",
+    default = "NS"
+  ),
+  expLevelT1 = fcase(
+    padj_T1 < alpha & log2FC_T1 >= lfc, "Up",
+    padj_T1 < alpha & log2FC_T1 <= -lfc, "Down",
+    default = "NS"
+  ),
+  expLevelT2 = fcase(
+    padj_T2 < alpha & log2FC_T2 >= lfc, "Up",
+    padj_T2 < alpha & log2FC_T2 <= -lfc, "Down",
+    default = "NS"
+  )
+)]
+
+#modify the genes in the sig file to match anno
+sig.genes.DSC120.exp$gene <- gsub("\\.v[0-9].*", "", sig.genes.DSC120.exp$gene)
+
+#match the expression file with anno
+sig.genes.DSC120.exp <- anno[
+  sig.genes.DSC120.exp,
+  on = .(gene)
+]
+
+#flowering genes
+sig.genes.DSC120.flower <- flower.florid.genes[
+  sig.genes.DSC120.exp,
+  on = .(arabID)]
+
+#convert list to table 
+cluster.DSC120.dt <- rbindlist(
+  lapply(names(gene.list.DSC120), function(cl) {
+    data.table(
+      gene = gene.list.DSC120[[cl]],
+      cluster = as.integer(cl)
+    )
+  })
+)
+
+#modify gene names 
+cluster.DSC120.dt$gene <- gsub("\\.v[0-9].*", "", cluster.DSC120.dt$gene)
+
+#merge
+cluster.DSC120.dt.anno <- merge(
+  cluster.DSC120.dt,
+  sig.genes.DSC120.flower,
+  by = "gene",
+  all.x = TRUE
+)
+
+#write.table(sig.genes.DSC120.exp,"sigDEGs/sig.genes.DSC120.txt",sep="\t", row.names = F, quote = F)
+
+#write.table(cluster.DSC120.dt.anno,"sigDEGs/sig.genes.DSC120.withFlowerGenesNclusters.txt",sep="\t", row.names = F, quote = F)
+
+
+##### non 196
+sig.genes.DSC196.exp <- copy(sig.genes.DSC196)
+#add a column checking _T0, _T1, _T2 colums = positive log2FC as Up and negative as Down
+sig.genes.DSC196.exp[, `:=`(
+  expLevelT0 = fcase(
+    padj_T0 < alpha & log2FC_T0 >= lfc, "Up",
+    padj_T0 < alpha & log2FC_T0 <= -lfc, "Down",
+    default = "NS"
+  ),
+  expLevelT1 = fcase(
+    padj_T1 < alpha & log2FC_T1 >= lfc, "Up",
+    padj_T1 < alpha & log2FC_T1 <= -lfc, "Down",
+    default = "NS"
+  ),
+  expLevelT2 = fcase(
+    padj_T2 < alpha & log2FC_T2 >= lfc, "Up",
+    padj_T2 < alpha & log2FC_T2 <= -lfc, "Down",
+    default = "NS"
+  )
+)]
+
+
+#modify the genes in the sig file to match anno
+sig.genes.DSC196.exp$gene <- gsub("\\.v[0-9].*", "", sig.genes.DSC196.exp$gene)
+
+
+#match the expression file with anno
+sig.genes.DSC196.exp <- anno[
+  sig.genes.DSC196.exp,
+  on = .(gene)
+]
+
+#flowering genes
+sig.genes.DSC196.flower <- flower.florid.genes[
+  sig.genes.DSC196.exp,
+  on = .(arabID)]
+
+#convert list to table 
+cluster.DSC196.dt <- rbindlist(
+  lapply(names(gene.list.DSC196), function(cl) {
+    data.table(
+      gene = gene.list.DSC196[[cl]],
+      cluster = as.integer(cl)
+    )
+  })
+)
+
+#modify gene names 
+cluster.DSC196.dt$gene <- gsub("\\.v[0-9].*", "", cluster.DSC196.dt$gene)
+
+#merge
+cluster.DSC196.dt.anno <- merge(
+  cluster.DSC196.dt,
+  sig.genes.DSC196.flower,
+  by = "gene",
+  all.x = TRUE
+)
+
+#write.table(sig.genes.DSC196.exp,"sigDEGs/sig.genes.DSC196.txt",sep="\t", row.names = F, quote = F)
+
+#write.table(cluster.DSC196.dt.anno,"sigDEGs/sig.genes.DSC196.withFlowerGenesNclusters.txt",sep="\t", row.names = F, quote = F)
+
+
+
+```
+
+
+
+Plotting the counts of signinficant DEGs
+
+```{r}
+#significan DEGS summary
+
+degs <- rbindlist(list(
+  "DSC272 (Early)" = deg.counts.DSC272,
+  "DSC120 (Late)" = deg.counts.DSC120,
+  "DSC196 (Non)" = deg.counts.DSC196
+), idcol = "Genotype")
+
+#long tabke
+degs <- dcast(degs, Genotype ~ Time, value.var = "N_DEGs")
+
+degs.long <- melt(degs, 
+                 id.vars = "Genotype", 
+                 variable.name = "Timepoint", 
+                 value.name = "DEGs")
+
+#fact
+degs.long[, Genotype := factor(Genotype, levels = c("DSC272 (Early)","DSC120 (Late)","DSC196 (Non)"))]
+
+#plot
+ggplot(degs.long, aes(x = Genotype, y = DEGs, fill = Timepoint)) +
+  geom_bar(stat = "identity", position = "dodge") + 
+  geom_text(aes(label =DEGs),
+            position = position_dodge(width = 0.9),
+            vjust = -0.1,size = 3)+
+  theme_classic()+scale_fill_brewer(palette = 1) 
+
+```
+
+
+
+```{r}
+
+#now maybe just to see the total counts of up and down regulated significant genes 
+count296 <- res.DSC272.all[, .(
+  Genotype = "DSC272 (Early)",
+  Up = c(sum(padj_T0 < alpha & log2FC_T0 >= lfc, na.rm=T), 
+         sum(padj_T1 < alpha & log2FC_T1 >= lfc, na.rm=T), 
+         sum(padj_T2 < alpha & log2FC_T2 >= lfc, na.rm=T)),
+  Down = c(sum(padj_T0 < alpha & log2FC_T0 <= -lfc, na.rm=T), 
+           sum(padj_T1 < alpha & log2FC_T1 <= -lfc, na.rm=T), 
+           sum(padj_T2 < alpha & log2FC_T2 <= -lfc, na.rm=T)),
+  Time = c("T0", "T1", "T2")
+)]
+
+count120 <- res.DSC120.all[, .(
+  Genotype = "DSC120 (Late)",
+  Up = c(sum(padj_T0 < alpha & log2FC_T0 >= lfc, na.rm=T), 
+         sum(padj_T1 < alpha & log2FC_T1 >= lfc, na.rm=T), 
+         sum(padj_T2 < alpha & log2FC_T2 >= lfc, na.rm=T)),
+  Down = c(sum(padj_T0 < alpha & log2FC_T0 <= -lfc, na.rm=T), 
+           sum(padj_T1 < alpha & log2FC_T1 <= -lfc, na.rm=T), 
+           sum(padj_T2 < alpha & log2FC_T2 <= -lfc, na.rm=T)),
+  Time = c("T0", "T1", "T2")
+)]
+
+count196 <- res.DSC196.all[, .(
+  Genotype = "DSC196 (Non)",
+  Up = c(sum(padj_T0 < alpha & log2FC_T0 >= lfc, na.rm=T), 
+         sum(padj_T1 < alpha & log2FC_T1 >= lfc, na.rm=T), 
+         sum(padj_T2 < alpha & log2FC_T2 >= lfc, na.rm=T)),
+  Down = c(sum(padj_T0 < alpha & log2FC_T0 <= -lfc, na.rm=T), 
+           sum(padj_T1 < alpha & log2FC_T1 <= -lfc, na.rm=T), 
+           sum(padj_T2 < alpha & log2FC_T2 <= -lfc, na.rm=T)),
+  Time = c("T0", "T1", "T2")
+)]
+
+counts.stats <- rbind(count296, count120, count196)
+
+counts.stats[, Total := Up + Down]
+counts.stats <- dcast(counts.stats, Genotype ~ Time, value.var = c("Up", "Down", "Total"))
+#colmun order
+setcolorder(counts.stats, c("Genotype", 
+                           "Up_T0", "Down_T0", "Total_T0", 
+                           "Up_T1", "Down_T1", "Total_T1", 
+                           "Up_T2", "Down_T2", "Total_T2"))
+
+counts.stats
+```
+
+
+```{r}
+#plot counts 
+#reshape
+plot.dat <- melt(counts.stats, 
+                  id.vars = "Genotype", 
+                  measure.vars = patterns("^Up_", "^Down_"),
+                  variable.name = "Timepoint",
+                  value.name = c("Up", "Down"))
+
+plot.dat[, Timepoint := factor(Timepoint, labels = c("T0", "T1", "T2"))]
+#melt
+plot.dat.long <- melt(plot.dat, 
+                       id.vars = c("Genotype", "Timepoint"), 
+                       measure.vars = c("Up", "Down"),
+                       variable.name = "Exp", 
+                       value.name = "Count")
+
+#re level - i like to see early, late .. non 
+plot.dat.long[, Genotype := factor(Genotype, levels = c("DSC272 (Early)","DSC120 (Late)","DSC196 (Non)"))]
+#plot
+ggplot(plot.dat.long, aes(x = Timepoint, y = Count, fill = Exp)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_text(aes(label =Count),
+            position = position_dodge(width = 0.9),
+            vjust = -0.1,size = 2.5) +
+  facet_wrap(~Genotype) +
+  scale_fill_manual(values = c("Up" = "red", "Down" = "blue")) +
+  labs(title = "DEGs",
+       y = "") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+```
+
+
+
+
+
+Upset plot - Across genotype and time point 
+
+```{r}
+
+library(UpSetR)
+
+list.input <- list(
+  DSC272.early.T0 = res.DSC272.all[padj_T0 < alpha & abs(log2FC_T0) >= lfc, gene],
+  DSC272.early.T1 = res.DSC272.all[padj_T1 < alpha & abs(log2FC_T1) >= lfc, gene],
+  DSC272.early.T2 = res.DSC272.all[padj_T2 < alpha & abs(log2FC_T2) >= lfc, gene],
+  
+  DSC120.late.T0 = res.DSC120.all[padj_T0 < alpha & abs(log2FC_T0) >= lfc, gene],
+  DSC120.late.T1 = res.DSC120.all[padj_T1 < alpha & abs(log2FC_T1) >= lfc, gene],
+  DSC120.late.T2 = res.DSC120.all[padj_T2 < alpha & abs(log2FC_T2) >= lfc, gene],
+  
+  DSC196.non.T0 = res.DSC196.all[padj_T0 < alpha & abs(log2FC_T0) >= lfc, gene],
+  DSC196.non.T1 = res.DSC196.all[padj_T1 < alpha & abs(log2FC_T1) >= lfc, gene],
+  DSC196.non.T2 = res.DSC196.all[padj_T2 < alpha & abs(log2FC_T2) >= lfc, gene]
+)
+
+#list to upSetR format
+upset.data <- fromList(list.input)
+
+#color
+col <- rev(c(rep("#3498db", 3), rep("#2ecc71", 3), rep("#f39c12", 3)))
+
+#upset plot
+upset(
+  upset.data,
+  sets = names(list.input),
+  keep.order = TRUE,
+  nsets = 9,
+  nintersects = 30,
+  sets.bar.color = col,
+  main.bar.color = "#2c3e50",
+  text.scale = c(1.2, 1.2, 1, 1, 1.5, 1.2),
+  show.numbers = "yes"
+)
+
+```
+
+Simplified Upset - Per genotype (check across time points)
+
+
+```{r}
+list.297 <- list(
+    T0 = res.DSC272.all[padj_T0 < alpha & abs(log2FC_T0) >= lfc, gene],
+    T1 = res.DSC272.all[padj_T1 < alpha & abs(log2FC_T1) >= lfc, gene],
+    T2 = res.DSC272.all[padj_T2 < alpha & abs(log2FC_T2) >= lfc, gene]
+)
+
+upset.297  <- fromList(list.297 )
+
+upset(
+  upset.297,
+  sets = names(upset.297),
+  keep.order = TRUE,
+  text.scale = c(1.2, 1.2, 1, 1, 1.5, 1.2),
+  show.numbers = "yes")
+
+grid.text("DSC272", x = 0.65, y = 0.95)
+
+
+```
+
+
+```{r}
+list.120 <- list(
+    T0 = res.DSC120.all[padj_T0 < alpha & abs(log2FC_T0) >= lfc, gene],
+    T1 = res.DSC120.all[padj_T1 < alpha & abs(log2FC_T1) >= lfc, gene],
+    T2 = res.DSC120.all[padj_T2 < alpha & abs(log2FC_T2) >= lfc, gene]
+)
+
+upset.120  <- fromList(list.120)
+
+upset(
+  upset.120,
+  sets = names(upset.120),
+  keep.order = TRUE,
+  text.scale = c(1.2, 1.2, 1, 1, 1.5, 1.2),
+  show.numbers = "yes")
+
+grid.text("DSC120", x = 0.65, y = 0.95)
+
+
+```
+
+```{r}
+
+list.196 <- list(
+    T0 = res.DSC196.all[padj_T0 < alpha & abs(log2FC_T0) >= lfc, gene],
+    T1 = res.DSC196.all[padj_T1 < alpha & abs(log2FC_T1) >= lfc, gene],
+    T2 = res.DSC196.all[padj_T2 < alpha & abs(log2FC_T2) >= lfc, gene]
+)
+
+upset.196  <- fromList(list.196)
+
+upset(
+  upset.196,
+  sets = names(upset.196),
+  keep.order = TRUE,
+  text.scale = c(1.2, 1.2, 1, 1, 1.5, 1.2),
+  show.numbers = "yes")
+
+grid.text("DSC196", x = 0.65, y = 0.95)
+
+
+
+```
+
+```{r}
+
+
+early.late <- list(
+  DSC272.early.T0 = res.DSC272.all[padj_T0 < alpha & abs(log2FC_T0) >= lfc, gene],
+  DSC272.early.T1 = res.DSC272.all[padj_T1 < alpha & abs(log2FC_T1) >= lfc, gene],
+  DSC272.early.T2 = res.DSC272.all[padj_T2 < alpha & abs(log2FC_T2) >= lfc, gene],
+  
+  DSC120.late.T0 = res.DSC120.all[padj_T0 < alpha & abs(log2FC_T0) >= lfc, gene],
+  DSC120.late.T1 = res.DSC120.all[padj_T1 < alpha & abs(log2FC_T1) >= lfc, gene],
+  DSC120.late.T2 = res.DSC120.all[padj_T2 < alpha & abs(log2FC_T2) >= lfc, gene]
+)
+
+#list to upSetR format
+upset.early.late <- fromList(early.late)
+
+#color
+col <- rev(c( rep("#2ecc71", 3), rep("#f39c12", 3)))
+
+#upset plot
+upset(
+  upset.early.late,
+  sets = names(early.late),
+  keep.order = TRUE,
+  nsets = 9,
+  sets.bar.color = col,
+  main.bar.color = "#2c3e50",
+  show.numbers = "yes"
+)
+
+
+```
+
+## checking out functions of core genes before running GO 
+
+
+
+
