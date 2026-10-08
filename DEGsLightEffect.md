@@ -1,12 +1,3 @@
----
-title: "CassavaFlowering"
-author: "Michael Landi"
-date: "2026-02-02"
-output:
-  pdf_document: default
-  html_document: default
----
-
 
 ```{r setup, include=F}
 
@@ -49,26 +40,6 @@ res.DSC272.T2 <- results(dds, contrast = list(c(
   "conditionLight.timeT2"
 )))
 ```
-
-Histogram of p values 
-```{r}
-par(mfrow=c(1,3))
-hist(res.DSC272.T0$pvalue, breaks=50, main="DSC272 T0", xlab="p-value")
-hist(res.DSC272.T1$pvalue, breaks=50, main="DSC272 T1", xlab="p-value")
-hist(res.DSC272.T2$pvalue, breaks=50, main="DSC272 T2", xlab="p-value")
-par(mfrow=c(1,1))
-
-```
-
-MA plots 
-
-```{r}
-
-plotMA(res.DSC272.T0)
-
-```
-
-
 
 ```{r}
 
@@ -116,9 +87,6 @@ gene.list.DSC272 <- sig.genes.DSC272$gene
 
 
 ```
-
-
-
 
 Heatmap of significant genes 
 ```{r}
@@ -224,91 +192,6 @@ pheatmap(mat.scaled.DSC272,
 ```
 
 
-```{r}
-mat.scaled.dt.DSC272 <- as.data.table(mat.scaled.DSC272, keep.rownames = "gene")
-
-mat.scaled.dt.DSC272 <- merge(mat.scaled.dt.DSC272, cluster.df.DSC272, by = "gene")
-
-mat.scaled.dt.DSC272.long <- melt(mat.scaled.dt.DSC272,
-                                  id.vars = c("gene", "cluster"),
-                                  variable.name = "sample",
-                                  value.name = "expr")
-
-## add metadata
-mat.scaled.dt.DSC272.long  <- merge(mat.scaled.dt.DSC272.long , coldata.DSC272, by = "sample")
-
-#summary
-mat.scaled.dt.DSC272.summary <- mat.scaled.dt.DSC272.long[, .(
-  mean_expr = mean(expr)
-), by = .(cluster, time, condition)]
-
-
-#cluster orde
-mat.scaled.dt.DSC272.summary[, cluster := factor(cluster, levels = 1:6)]
-
-#plot
-ggplot(mat.scaled.dt.DSC272.summary,
-       aes(x = time,
-           y = mean_expr,
-           color = condition,
-           group = condition)) +
-  geom_line(size = 1) +
-  geom_point(size = 2) +
-  facet_wrap(~ cluster, scales = "free_y") +
-  theme_classic() +
-  labs(title = "Effect of light on DSC120_late clusters",
-       x = "Time",
-       y = "Exp") +
-  scale_color_manual(values = c(
-    "NoLight" = "#56B4E9",
-    "Light"   = "#E69F00"
-  ))
-
-```
-
-
-Volcano plots
-```{r}
-a<-EnhancedVolcano(res.DSC272.T0,
-                lab = NA,
-                x = "log2FoldChange",
-                y = "padj",
-                pCutoff = alpha,
-                FCcutoff = lfc,
-                title = "T0",
-                subtitle = NULL) + theme_classic() + theme(legend.position ="none")
-
-```
-
-
-
-```{r}
-b<-EnhancedVolcano(res.DSC272.T1,
-                lab = NA,
-                x = "log2FoldChange",
-                y = "padj",
-                pCutoff = alpha,
-                FCcutoff = lfc,
-                title = "T1",
-                subtitle = NULL) + theme_classic()+ theme(legend.position ="none")
-
-```
-
-
-
-
-```{r}
-c<-EnhancedVolcano(res.DSC272.T2,
-                lab = NA,
-                x = "log2FoldChange",
-                y = "padj",
-                pCutoff = alpha,
-                FCcutoff = lfc,
-                subtitle = NULL,
-                title = "T2") + theme_classic()+ theme(legend.position ="none")
-```
-
-
 
 
 # DSC120_late  - Light vs NoLight - timepoints (T0,T1,T2)
@@ -336,24 +219,6 @@ res.DSC120.T2 <- results(dds,
                            "conditionLight.genoDSC120_late.timeT2"
                          )))
 ```
-
-
-```{r}
-## check out histgram
-par(mfrow=c(1,3))
-hist(res.DSC120.T0$pvalue, breaks=50, main="DSC120 T0", xlab="p-value")
-hist(res.DSC120.T1$pvalue, breaks=50, main="DSC120 T1", xlab="p-value")
-hist(res.DSC120.T2$pvalue, breaks=50, main="DSC120 T2", xlab="p-value")
-par(mfrow=c(1,1))
-```
-
-```{r}
-plotMA(res.DSC120.T0)
-plotMA(res.DSC120.T1)
-plotMA(res.DSC120.T2)
-
-```
-
 
 
 ```{r}
@@ -495,93 +360,6 @@ pheatmap(mat.scaled.DSC120,
 
 ```
 
-
-```{r}
-mat.scaled.dt.DSC120 <- as.data.table(mat.scaled.DSC120, keep.rownames = "gene")
-
-mat.scaled.dt.DSC120 <- merge(mat.scaled.dt.DSC120, cluster.df.DSC120, by = "gene")
-
-mat.scaled.dt.DSC120.long <- melt(mat.scaled.dt.DSC120,
-                                  id.vars = c("gene", "cluster"),
-                                  variable.name = "sample",
-                                  value.name = "expr")
-
-## add metadata
-mat.scaled.dt.DSC120.long  <- merge(mat.scaled.dt.DSC120.long , coldata.DSC120, by = "sample")
-
-#summary
-mat.scaled.dt.DSC120.summary <- mat.scaled.dt.DSC120.long[, .(
-  mean_expr = mean(expr)
-), by = .(cluster, time, condition)]
-
-
-#cluster orde
-mat.scaled.dt.DSC120.summary[, cluster := factor(cluster, levels = 1:6)]
-
-#plot
-ggplot(mat.scaled.dt.DSC120.summary,
-       aes(x = time,
-           y = mean_expr,
-           color = condition,
-           group = condition)) +
-  geom_line(size = 1) +
-  geom_point(size = 2) +
-  facet_wrap(~ cluster, scales = "free_y") +
-  theme_classic() +
-  labs(title = "Effect of light on DSC120_late clusters",
-       x = "Time",
-       y = "Exp") +
-  scale_color_manual(values = c(
-    "NoLight" = "#56B4E9",
-    "Light"   = "#E69F00"
-  ))
-
-
-
-```
-
-
-
-
-
-```{r}
-a <- EnhancedVolcano(res.DSC120.T0,
-                lab=NA,
-                x="log2FoldChange",
-                y="padj",
-                pCutoff=alpha,
-                FCcutoff=lfc,
-                subtitle = NULL,
-                title="T0")+ theme_classic() + theme(legend.position = "none")
-```
-
-
-
-```{r}
-b<-EnhancedVolcano(res.DSC120.T1,
-                lab=NA,
-                x="log2FoldChange",
-                y="padj",
-                pCutoff=alpha,
-                FCcutoff=lfc,
-                subtitle = NULL,
-                title="T1")+ theme_classic() + theme(legend.position = "none")
-
-```
-
-
-
-```{r}
-
-c<- EnhancedVolcano(res.DSC120.T2,
-                lab=NA,
-                x="log2FoldChange",
-                y="padj",
-                pCutoff=alpha,
-                FCcutoff=lfc,
-                subtitle = NULL,
-                title="T2")+ theme_classic() + theme(legend.position = "none")
-```
 
 # DSC196_non  - Light vs NoLight - timepoints (T0,T1,T2)
 
@@ -744,93 +522,8 @@ pheatmap(mat.scaled.DSC196,
 
 ```
 
-```{r}
-mat.scaled.dt.DSC196 <- as.data.table(mat.scaled.DSC196, keep.rownames = "gene")
-
-mat.scaled.dt.DSC196 <- merge(mat.scaled.dt.DSC196, cluster.df.DSC196, by = "gene")
-
-mat.scaled.dt.DSC196.long <- melt(mat.scaled.dt.DSC196,
-                                  id.vars = c("gene", "cluster"),
-                                  variable.name = "sample",
-                                  value.name = "expr")
-
-## add metadata
-mat.scaled.dt.DSC196.long  <- merge(mat.scaled.dt.DSC196.long , coldata.DSC196, by = "sample")
-
-#summary
-mat.scaled.dt.DSC196.summary <- mat.scaled.dt.DSC196.long[, .(
-  mean_expr = mean(expr)
-), by = .(cluster, time, condition)]
 
 
-#cluster orde
-mat.scaled.dt.DSC196.summary[, cluster := factor(cluster, levels = 1:6)]
-
-#plot
-ggplot(mat.scaled.dt.DSC196.summary,
-       aes(x = time,
-           y = mean_expr,
-           color = condition,
-           group = condition)) +
-  geom_line(size = 1) +
-  geom_point(size = 2) +
-  facet_wrap(~ cluster, scales = "free_y") +
-  theme_classic() +
-  labs(title = "Effect of light on DSC196_late clusters",
-       x = "Time",
-       y = "Exp") +
-  scale_color_manual(values = c(
-    "NoLight" = "#56B4E9",
-    "Light"   = "#E69F00"
-  ))
-
-
-```
-
-
-
-
-```{r}
-a <- EnhancedVolcano(res.DSC196.T0,
-                lab=NA,
-                x="log2FoldChange",
-                y="padj",
-                pCutoff=alpha,
-                FCcutoff=lfc,
-                subtitle = NULL,
-                title="T0") + theme_classic()+ theme(legend.position ="none")
-
-```
-
-
-
-```{r}
-
-b<-EnhancedVolcano(res.DSC196.T1,
-                lab=NA,
-                x="log2FoldChange",
-                y="padj",
-                pCutoff=alpha,
-                FCcutoff=lfc,
-                subtitle = NULL,
-                title="T1")+ theme_classic()+ theme(legend.position ="none")
-```
-
-
-
-
-```{r}
-c<-EnhancedVolcano(res.DSC196.T2,
-                lab=NA,
-                x="log2FoldChange",
-                y="padj",
-                pCutoff=alpha,
-                FCcutoff=lfc,
-                subtitle = NULL,
-                title="T2")+ theme_classic()+ theme(legend.position ="none")
-
-
-```
 
 
 Now lets check out gene ontology 
