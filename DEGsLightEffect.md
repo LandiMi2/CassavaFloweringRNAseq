@@ -10,6 +10,8 @@ library(EnhancedVolcano)
 library(VennDiagram)
 library(grid)
 
+setwd("~/Documents/PhD-Bioinformatics-EpiCass/Analysis/Flowering/")
+
 #load - design - ~ condition * geno * time
 dds <- readRDS("counts/DESeqCasFlower.rds")
 
