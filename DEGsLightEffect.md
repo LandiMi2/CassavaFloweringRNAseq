@@ -1,4 +1,5 @@
 
+
 ```{r setup, include=F}
 
 library(data.table)
@@ -11,6 +12,7 @@ library(grid)
 
 #load - design - ~ condition * geno * time
 dds <- readRDS("counts/DESeqCasFlower.rds")
+
 
 #save paramters
 alpha <- 0.05
@@ -25,7 +27,7 @@ resultsNames(dds)
 ```
 
 
-# DSC272_early - Light vs NoLight - timepoints (T0,T1,T2)
+## DSC272_early - Light vs NoLight - timepoints (T0,T1,T2)
 
 ```{r}
 res.DSC272.T0 <- results(dds, name = "condition_Light_vs_NoLight")
@@ -40,6 +42,7 @@ res.DSC272.T2 <- results(dds, contrast = list(c(
   "conditionLight.timeT2"
 )))
 ```
+
 
 ```{r}
 
@@ -88,7 +91,8 @@ gene.list.DSC272 <- sig.genes.DSC272$gene
 
 ```
 
-Heatmap of significant genes 
+
+### Heatmap of significant genes 
 ```{r}
 #subset for heatmap plotting 
 dds.DSC272 <- dds[, colData(dds)$geno == "DSC272_early"]
@@ -133,7 +137,7 @@ pheatmap(mat.DSC272,
 ```
 
 
-Clustering genes based on expression pattern
+### Clustering genes based on expression pattern - Fig 1.b
 
 ```{r}
 #mat.DSC272
@@ -193,8 +197,7 @@ pheatmap(mat.scaled.DSC272,
 
 
 
-
-# DSC120_late  - Light vs NoLight - timepoints (T0,T1,T2)
+## DSC120_late  - Light vs NoLight - timepoints (T0,T1,T2)
 
 ```{r}
 res.DSC120.T0 <- results(dds,
@@ -221,6 +224,9 @@ res.DSC120.T2 <- results(dds,
 ```
 
 
+
+
+
 ```{r}
 ##combine
 res.DSC120.all <- data.table(
@@ -239,8 +245,8 @@ res.DSC120.all <- data.table(
 ```
 
 
-#counts
 ```{r}
+#counts 
 count.T0 <- sum(res.DSC120.all$padj_T0 < alpha & abs(res.DSC120.all$log2FC_T0) >= lfc, na.rm = TRUE)
 count.T1 <- sum(res.DSC120.all$padj_T1 < alpha & abs(res.DSC120.all$log2FC_T1) >= lfc, na.rm = TRUE)
 count.T2 <- sum(res.DSC120.all$padj_T2 < alpha & abs(res.DSC120.all$log2FC_T2) >= lfc, na.rm = TRUE)
@@ -298,6 +304,7 @@ pheatmap(mat.DSC120,
 
 ```
 
+### Clustering genes based on expression pattern - Fig 1.d 
 
 ```{r}
 mat.DSC120
@@ -361,7 +368,7 @@ pheatmap(mat.scaled.DSC120,
 ```
 
 
-# DSC196_non  - Light vs NoLight - timepoints (T0,T1,T2)
+## DSC196_non  - Light vs NoLight - timepoints (T0,T1,T2)
 
 ```{r}
 res.DSC196.T0 <- results(dds,
@@ -462,7 +469,7 @@ pheatmap(mat.DSC196,
 
 ```
 
-
+### Clustering genes based on expression pattern - Fig 1.f
 ```{r}
 #mat.DSC196
 
@@ -524,267 +531,7 @@ pheatmap(mat.scaled.DSC196,
 
 
 
-
-
-Now lets check out gene ontology 
-
-```{r}
-
-#extract gene clusters 
-#early 
-# list of genes per cluster
-genes.by.cluster.DSC272 <- mat.scaled.dt.DSC272[, .(genes = list(gene)), by = cluster]
-
-# list of genes in each cluster 
-gene.list.DSC272  <- setNames(genes.by.cluster.DSC272$genes,
-                            genes.by.cluster.DSC272$cluster)
-
-#late 
-genes.by.cluster.DSC120 <- mat.scaled.dt.DSC120[, .(genes = list(gene)), by = cluster]
-
-gene.list.DSC120  <- setNames(genes.by.cluster.DSC120$genes,
-                            genes.by.cluster.DSC120$cluster)
-
-#late 
-# list of genes per cluster
-genes.by.cluster.DSC196 <- mat.scaled.dt.DSC196[, .(genes = list(gene)), by = cluster]
-
-# list of genes in each cluster 
-gene.list.DSC196 <- setNames(genes.by.cluster.DSC196$genes,
-                            genes.by.cluster.DSC196$cluster)
-
-#for each cluster
-#gene.list.DSC272
-#gene.list.DSC196
-#gene.list.DSC120
-
-
-```
-
-
-
-```{r}
-
-sig.genes.DSC272.exp <- copy(sig.genes.DSC272)
-#add a column checking _T0, _T1, _T2 colums = positive log2FC as Up and negative as Down
-sig.genes.DSC272.exp[, `:=`(
-  expLevelT0 = fcase(
-    padj_T0 < alpha & log2FC_T0 >= lfc, "Up",
-    padj_T0 < alpha & log2FC_T0 <= -lfc, "Down",
-    default = "NS"
-  ),
-  expLevelT1 = fcase(
-    padj_T1 < alpha & log2FC_T1 >= lfc, "Up",
-    padj_T1 < alpha & log2FC_T1 <= -lfc, "Down",
-    default = "NS"
-  ),
-  expLevelT2 = fcase(
-    padj_T2 < alpha & log2FC_T2 >= lfc, "Up",
-    padj_T2 < alpha & log2FC_T2 <= -lfc, "Down",
-    default = "NS"
-  )
-)]
-
-
-#Now add funx
-anno <- fread("Mesculenta_671_v8.1.P14.annotation_info.txt")
-anno <- anno[, .(anno$locusName,anno$`Best-hit-arabi-defline`, anno$`Best-hit-arabi-name`)]
-colnames(anno) <- c("gene","anno", "arabID")
-#get unique annotations
-anno <- unique(anno[, .(gene, anno,arabID)])
-
-#modify the genes in the sig file to match anno
-sig.genes.DSC272.exp$gene <- gsub("\\.v[0-9].*", "", sig.genes.DSC272.exp$gene)
-
-#match the expression file with anno
-sig.genes.DSC272.exp <- anno[
-  sig.genes.DSC272.exp,
-  on = .(gene)
-]
-
-##Now check if there are any arabidopsis matching 
-flowering.genes <- fread("CopyFlowerArab.tsv")
-florid.genes <- fread("floridGenes/FLORID_306_flowering_genes.csv")
-flowering.genes <- flowering.genes[,. (flowering.genes$`Gene number`,
-                                       flowering.genes$`Gene name`,
-                                       flowering.genes$`Flowering pathway`,
-                                       flowering.genes$`Protein function`)]
-colnames(flowering.genes) <- c("arabID","anno","pathway","funx")
-colnames(florid.genes) <- c("sym" ,"arabID","funx","path")
-florid.genes <- florid.genes[,.(sym, arabID, funx)]
-
-#combine 
-flower.florid.genes <- merge(flowering.genes, florid.genes, 
-                            by = "arabID", 
-                            all = T, 
-                            suffixes = c(".flowerPlanck", ".florid"))
-
-#now we have a total of 328 genes 
-
-#check matches of flowering genes
-sig.genes.DSC272.flower <- flower.florid.genes[
-  sig.genes.DSC272.exp,
-  on = .(arabID)]
-
-
-### now I want to check where the genes are coming from 
-#gene.list.DSC272
-
-#convert list to table 
-cluster.DSC272.dt <- rbindlist(
-  lapply(names(gene.list.DSC272), function(cl) {
-    data.table(
-      gene = gene.list.DSC272[[cl]],
-      cluster = as.integer(cl)
-    )
-  })
-)
-
-#modify gene names 
-cluster.DSC272.dt$gene <- gsub("\\.v[0-9].*", "", cluster.DSC272.dt$gene)
-
-#merge
-cluster.DSC272.dt.anno <- merge(
-  cluster.DSC272.dt,
-  sig.genes.DSC272.flower,
-  by = "gene",
-  all.x = TRUE
-)
-
-#write.table(sig.genes.DSC272.exp,"sigDEGs/sig.genes.DSC272.txt",sep="\t", row.names = F, quote = F)
-
-#write.table(cluster.DSC272.dt.anno,"sigDEGs/sig.genes.DSC272.withFlowerGenesNclusters.txt",sep="\t", row.names = F, quote = F)
-
-#### late
-sig.genes.DSC120.exp <- copy(sig.genes.DSC120)
-#add a column checking _T0, _T1, _T2 colums = positive log2FC as Up and negative as Down
-sig.genes.DSC120.exp[, `:=`(
-  expLevelT0 = fcase(
-    padj_T0 < alpha & log2FC_T0 >= lfc, "Up",
-    padj_T0 < alpha & log2FC_T0 <= -lfc, "Down",
-    default = "NS"
-  ),
-  expLevelT1 = fcase(
-    padj_T1 < alpha & log2FC_T1 >= lfc, "Up",
-    padj_T1 < alpha & log2FC_T1 <= -lfc, "Down",
-    default = "NS"
-  ),
-  expLevelT2 = fcase(
-    padj_T2 < alpha & log2FC_T2 >= lfc, "Up",
-    padj_T2 < alpha & log2FC_T2 <= -lfc, "Down",
-    default = "NS"
-  )
-)]
-
-#modify the genes in the sig file to match anno
-sig.genes.DSC120.exp$gene <- gsub("\\.v[0-9].*", "", sig.genes.DSC120.exp$gene)
-
-#match the expression file with anno
-sig.genes.DSC120.exp <- anno[
-  sig.genes.DSC120.exp,
-  on = .(gene)
-]
-
-#flowering genes
-sig.genes.DSC120.flower <- flower.florid.genes[
-  sig.genes.DSC120.exp,
-  on = .(arabID)]
-
-#convert list to table 
-cluster.DSC120.dt <- rbindlist(
-  lapply(names(gene.list.DSC120), function(cl) {
-    data.table(
-      gene = gene.list.DSC120[[cl]],
-      cluster = as.integer(cl)
-    )
-  })
-)
-
-#modify gene names 
-cluster.DSC120.dt$gene <- gsub("\\.v[0-9].*", "", cluster.DSC120.dt$gene)
-
-#merge
-cluster.DSC120.dt.anno <- merge(
-  cluster.DSC120.dt,
-  sig.genes.DSC120.flower,
-  by = "gene",
-  all.x = TRUE
-)
-
-#write.table(sig.genes.DSC120.exp,"sigDEGs/sig.genes.DSC120.txt",sep="\t", row.names = F, quote = F)
-
-#write.table(cluster.DSC120.dt.anno,"sigDEGs/sig.genes.DSC120.withFlowerGenesNclusters.txt",sep="\t", row.names = F, quote = F)
-
-
-##### non 196
-sig.genes.DSC196.exp <- copy(sig.genes.DSC196)
-#add a column checking _T0, _T1, _T2 colums = positive log2FC as Up and negative as Down
-sig.genes.DSC196.exp[, `:=`(
-  expLevelT0 = fcase(
-    padj_T0 < alpha & log2FC_T0 >= lfc, "Up",
-    padj_T0 < alpha & log2FC_T0 <= -lfc, "Down",
-    default = "NS"
-  ),
-  expLevelT1 = fcase(
-    padj_T1 < alpha & log2FC_T1 >= lfc, "Up",
-    padj_T1 < alpha & log2FC_T1 <= -lfc, "Down",
-    default = "NS"
-  ),
-  expLevelT2 = fcase(
-    padj_T2 < alpha & log2FC_T2 >= lfc, "Up",
-    padj_T2 < alpha & log2FC_T2 <= -lfc, "Down",
-    default = "NS"
-  )
-)]
-
-
-#modify the genes in the sig file to match anno
-sig.genes.DSC196.exp$gene <- gsub("\\.v[0-9].*", "", sig.genes.DSC196.exp$gene)
-
-
-#match the expression file with anno
-sig.genes.DSC196.exp <- anno[
-  sig.genes.DSC196.exp,
-  on = .(gene)
-]
-
-#flowering genes
-sig.genes.DSC196.flower <- flower.florid.genes[
-  sig.genes.DSC196.exp,
-  on = .(arabID)]
-
-#convert list to table 
-cluster.DSC196.dt <- rbindlist(
-  lapply(names(gene.list.DSC196), function(cl) {
-    data.table(
-      gene = gene.list.DSC196[[cl]],
-      cluster = as.integer(cl)
-    )
-  })
-)
-
-#modify gene names 
-cluster.DSC196.dt$gene <- gsub("\\.v[0-9].*", "", cluster.DSC196.dt$gene)
-
-#merge
-cluster.DSC196.dt.anno <- merge(
-  cluster.DSC196.dt,
-  sig.genes.DSC196.flower,
-  by = "gene",
-  all.x = TRUE
-)
-
-#write.table(sig.genes.DSC196.exp,"sigDEGs/sig.genes.DSC196.txt",sep="\t", row.names = F, quote = F)
-
-#write.table(cluster.DSC196.dt.anno,"sigDEGs/sig.genes.DSC196.withFlowerGenesNclusters.txt",sep="\t", row.names = F, quote = F)
-
-
-
-```
-
-
-
-Plotting the counts of signinficant DEGs
+## Plotting the counts of signinficant DEGs
 
 ```{r}
 #significan DEGS summary
@@ -867,6 +614,7 @@ setcolorder(counts.stats, c("Genotype",
 counts.stats
 ```
 
+## Fig 1.a
 
 ```{r}
 #plot counts 
@@ -902,154 +650,6 @@ ggplot(plot.dat.long, aes(x = Timepoint, y = Count, fill = Exp)) +
 
 ```
 
-
-
-
-
-Upset plot - Across genotype and time point 
-
-```{r}
-
-library(UpSetR)
-
-list.input <- list(
-  DSC272.early.T0 = res.DSC272.all[padj_T0 < alpha & abs(log2FC_T0) >= lfc, gene],
-  DSC272.early.T1 = res.DSC272.all[padj_T1 < alpha & abs(log2FC_T1) >= lfc, gene],
-  DSC272.early.T2 = res.DSC272.all[padj_T2 < alpha & abs(log2FC_T2) >= lfc, gene],
-  
-  DSC120.late.T0 = res.DSC120.all[padj_T0 < alpha & abs(log2FC_T0) >= lfc, gene],
-  DSC120.late.T1 = res.DSC120.all[padj_T1 < alpha & abs(log2FC_T1) >= lfc, gene],
-  DSC120.late.T2 = res.DSC120.all[padj_T2 < alpha & abs(log2FC_T2) >= lfc, gene],
-  
-  DSC196.non.T0 = res.DSC196.all[padj_T0 < alpha & abs(log2FC_T0) >= lfc, gene],
-  DSC196.non.T1 = res.DSC196.all[padj_T1 < alpha & abs(log2FC_T1) >= lfc, gene],
-  DSC196.non.T2 = res.DSC196.all[padj_T2 < alpha & abs(log2FC_T2) >= lfc, gene]
-)
-
-#list to upSetR format
-upset.data <- fromList(list.input)
-
-#color
-col <- rev(c(rep("#3498db", 3), rep("#2ecc71", 3), rep("#f39c12", 3)))
-
-#upset plot
-upset(
-  upset.data,
-  sets = names(list.input),
-  keep.order = TRUE,
-  nsets = 9,
-  nintersects = 30,
-  sets.bar.color = col,
-  main.bar.color = "#2c3e50",
-  text.scale = c(1.2, 1.2, 1, 1, 1.5, 1.2),
-  show.numbers = "yes"
-)
-
-```
-
-Simplified Upset - Per genotype (check across time points)
-
-
-```{r}
-list.297 <- list(
-    T0 = res.DSC272.all[padj_T0 < alpha & abs(log2FC_T0) >= lfc, gene],
-    T1 = res.DSC272.all[padj_T1 < alpha & abs(log2FC_T1) >= lfc, gene],
-    T2 = res.DSC272.all[padj_T2 < alpha & abs(log2FC_T2) >= lfc, gene]
-)
-
-upset.297  <- fromList(list.297 )
-
-upset(
-  upset.297,
-  sets = names(upset.297),
-  keep.order = TRUE,
-  text.scale = c(1.2, 1.2, 1, 1, 1.5, 1.2),
-  show.numbers = "yes")
-
-grid.text("DSC272", x = 0.65, y = 0.95)
-
-
-```
-
-
-```{r}
-list.120 <- list(
-    T0 = res.DSC120.all[padj_T0 < alpha & abs(log2FC_T0) >= lfc, gene],
-    T1 = res.DSC120.all[padj_T1 < alpha & abs(log2FC_T1) >= lfc, gene],
-    T2 = res.DSC120.all[padj_T2 < alpha & abs(log2FC_T2) >= lfc, gene]
-)
-
-upset.120  <- fromList(list.120)
-
-upset(
-  upset.120,
-  sets = names(upset.120),
-  keep.order = TRUE,
-  text.scale = c(1.2, 1.2, 1, 1, 1.5, 1.2),
-  show.numbers = "yes")
-
-grid.text("DSC120", x = 0.65, y = 0.95)
-
-
-```
-
-```{r}
-
-list.196 <- list(
-    T0 = res.DSC196.all[padj_T0 < alpha & abs(log2FC_T0) >= lfc, gene],
-    T1 = res.DSC196.all[padj_T1 < alpha & abs(log2FC_T1) >= lfc, gene],
-    T2 = res.DSC196.all[padj_T2 < alpha & abs(log2FC_T2) >= lfc, gene]
-)
-
-upset.196  <- fromList(list.196)
-
-upset(
-  upset.196,
-  sets = names(upset.196),
-  keep.order = TRUE,
-  text.scale = c(1.2, 1.2, 1, 1, 1.5, 1.2),
-  show.numbers = "yes")
-
-grid.text("DSC196", x = 0.65, y = 0.95)
-
-
-
-```
-
-```{r}
-
-
-early.late <- list(
-  DSC272.early.T0 = res.DSC272.all[padj_T0 < alpha & abs(log2FC_T0) >= lfc, gene],
-  DSC272.early.T1 = res.DSC272.all[padj_T1 < alpha & abs(log2FC_T1) >= lfc, gene],
-  DSC272.early.T2 = res.DSC272.all[padj_T2 < alpha & abs(log2FC_T2) >= lfc, gene],
-  
-  DSC120.late.T0 = res.DSC120.all[padj_T0 < alpha & abs(log2FC_T0) >= lfc, gene],
-  DSC120.late.T1 = res.DSC120.all[padj_T1 < alpha & abs(log2FC_T1) >= lfc, gene],
-  DSC120.late.T2 = res.DSC120.all[padj_T2 < alpha & abs(log2FC_T2) >= lfc, gene]
-)
-
-#list to upSetR format
-upset.early.late <- fromList(early.late)
-
-#color
-col <- rev(c( rep("#2ecc71", 3), rep("#f39c12", 3)))
-
-#upset plot
-upset(
-  upset.early.late,
-  sets = names(early.late),
-  keep.order = TRUE,
-  nsets = 9,
-  sets.bar.color = col,
-  main.bar.color = "#2c3e50",
-  show.numbers = "yes"
-)
-
-
-```
-
-## checking out functions of core genes before running GO 
 
 
 
