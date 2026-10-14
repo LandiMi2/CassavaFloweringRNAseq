@@ -30,30 +30,11 @@ go.272 <- enrichGO(
   ont = "ALL",
   pAdjustMethod = "fdr"
 )
-#check all terms 
-go.272 <- enrichGO(
-  gene = sig.272$arabID,
-  OrgDb = org.At.tair.db,
-  universe = universe$arabID,
-  keyType = "TAIR",
-  ont = "ALL",
-  pAdjustMethod = "fdr",pvalueCutoff = 1, qvalueCutoff = 1,
-)
-
-go.272.def <- enrichGO(
-  gene = sig.272$arabID,
-  OrgDb = org.At.tair.db,
-  keyType = "TAIR",
-  ont = "ALL",
-  pAdjustMethod = "fdr"
-)
 
 #get results
 go.272.dt <- as.data.table(go.272)
 go.272.def.dt <- as.data.table(go.272.def)
 #write.table(go.272.dt ,"../sigDEGs/GO/go.272.BG.txt",sep="\t", row.names = F, quote = F)
-#write.table(go.272.def.dt ,"../sigDEGs/GO/go.272.txt",sep="\t", row.names = F, quote = F)
-#write.table(go.272.dt ,"../sigDEGs/GO/go.272.ALL.txt",sep="\t", row.names = F, quote = F)
 
 ## plot only the universe one
 a <- dotplot(go.272, showCategory = 20, x = "p.adjust",label_format=50,
@@ -79,19 +60,11 @@ go.120 <- enrichGO(
   pAdjustMethod = "fdr"
 )
 
-go.120.def <- enrichGO(
-  gene = sig.120$arabID,
-  OrgDb = org.At.tair.db,
-  keyType = "TAIR",
-  ont = "ALL",
-  pAdjustMethod = "fdr"
-)
 
 #get results
 go.120.dt <- as.data.table(go.120)
 go.120.def.dt <- as.data.table(go.120.def)
 write.table(go.120.dt ,"../sigDEGs/GO/go.120.BG.txt",sep="\t", row.names = F, quote = F)
-write.table(go.120.def.dt ,"../sigDEGs/GO/go.120.txt",sep="\t", row.names = F, quote = F)
 
 b <- dotplot(go.120, showCategory = 20, x = "p.adjust",label_format=50,
              title = "120") 
@@ -115,19 +88,11 @@ go.196 <- enrichGO(
   pAdjustMethod = "fdr"
 )
 
-go.196.def <- enrichGO(
-  gene = sig.196$arabID,
-  OrgDb = org.At.tair.db,
-  keyType = "TAIR",
-  ont = "ALL",
-  pAdjustMethod = "fdr"
-)
 
 #get results
 go.196.dt <- as.data.table(go.196)  ## 115 Go terms 
 go.196.def.dt <- as.data.table(go.196.def)
 write.table(go.196.dt ,"../sigDEGs/GO/go.196.BG.txt",sep="\t", row.names = F, quote = F)
-write.table(go.196.def.dt ,"../sigDEGs/GO/go.196.txt",sep="\t", row.names = F, quote = F)
 
 c <- dotplot(go.196, showCategory = 20, x = "p.adjust",label_format=50,
              title = "196") 
@@ -163,20 +128,11 @@ go.T0 <- enrichGO(
   pAdjustMethod = "fdr"
 )
 
-go.T0.def <- enrichGO(
-  gene = sig.geno.T0$arabID,
-  OrgDb = org.At.tair.db,
-  keyType = "TAIR",
-  ont = "ALL",
-  pAdjustMethod = "fdr"
-)
-
 
 #get results
 go.T0.dt <- as.data.table(go.T0)
 go.T0.def.dt <- as.data.table(go.T0.def)
 write.table(go.T0.dt,"../sigDEGs/geno/GO/go.T0.BG.txt",sep="\t", row.names = F, quote = F)
-write.table(go.T0.def.dt,"../sigDEGs/geno/GO/go.T0.txt",sep="\t", row.names = F, quote = F)
 
 a1 <- dotplot(go.T0, showCategory = 20, x = "p.adjust",label_format=50,
              title = "T0") 
@@ -199,19 +155,10 @@ go.T1 <- enrichGO(
   pAdjustMethod = "fdr"
 )
 
-go.T1.def <- enrichGO(
-  gene = sig.geno.T1$arabID,
-  OrgDb = org.At.tair.db,
-  keyType = "TAIR",
-  ont = "ALL",
-  pAdjustMethod = "fdr"
-)
-
 #get results
 go.T1.dt <- as.data.table(go.T1)
 go.T1.def.dt <- as.data.table(go.T1.def)
 write.table(go.T1.dt,"../sigDEGs/geno/GO/go.T1.BG.txt",sep="\t", row.names = F, quote = F)
-write.table(go.T1.def.dt,"../sigDEGs/geno/GO/go.T1.txt",sep="\t", row.names = F, quote = F)
 
 a2 <- dotplot(go.T1, showCategory = 20, x = "p.adjust",label_format=50,
              title = "T1") 
@@ -234,19 +181,10 @@ go.T2 <- enrichGO(
   pAdjustMethod = "fdr"
 )
 
-go.T2.def <- enrichGO(
-  gene = sig.geno.T2$arabID,
-  OrgDb = org.At.tair.db,
-  keyType = "TAIR",
-  ont = "ALL",
-  pAdjustMethod = "fdr"
-)
-
 #get results
 go.T2.dt <- as.data.table(go.T2) #38 GO terms
 go.T2.def.dt <- as.data.table(go.T2.def) 
 write.table(go.T2.dt,"../sigDEGs/geno/GO/go.T2.BG.txt",sep="\t", row.names = F, quote = F)
-write.table(go.T2.def.dt,"../sigDEGs/geno/GO/go.T2.txt",sep="\t", row.names = F, quote = F)
 
 a3 <- dotplot(go.T2, showCategory = 20, x = "p.adjust",label_format=50,
              title = "T2") 
